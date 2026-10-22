@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import math
 import random
+import subprocess
+import threading
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
@@ -435,9 +437,25 @@ with st.sidebar:
     st.divider()
 
     st.markdown("**Testes de Bancada:**")
-    if st.button("Simular Pico de Tráfego (30s)", use_container_width=True):
-        st.session_state.stress_until = datetime.now().timestamp() + 30.0
-        st.toast("Pico de tráfego ativado temporariamente.", icon="ℹ️")
+    if st.button("Gerar Pico de Tráfego e CPU (25s)", use_container_width=True, type="secondary"):
+        st.session_state.stress_until = datetime.now().timestamp() + 25.0
+        if cfg.get("collection_mode") == "snmp_real":
+            def _inject_real_snmp_stress() -> None:
+                try:
+                    cmd = ':for i from=1 to=25 do={ :for j from=1 to=3000 do={ :put "BURST_TEST_STREAM_MIKROTIK_0123456789_ABCDEFGHIJ" }; :delay 500ms }'
+                    subprocess.run(
+                        ["ssh", "-o", "StrictHostKeyChecking=no", "-p", "2222", "admin@127.0.0.1", cmd],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=35,
+                    )
+                except Exception:
+                    pass
+
+            threading.Thread(target=_inject_real_snmp_stress, daemon=True).start()
+            st.toast("Disparando rajada real de tráfego e CPU no MikroTik via SSH...", icon="⚡")
+        else:
+            st.toast("Pico de tráfego ativado temporariamente no simulador.", icon="ℹ️")
 
     if st.button("Regenerar Carga de 2 Horas", use_container_width=True):
         count = gerar_historico.populate_history(hours=2.0, overwrite=True)
