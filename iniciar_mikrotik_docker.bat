@@ -43,7 +43,15 @@ timeout /t 8 /nobreak >nul
 echo [3/4] Configurando SNMP e interface de rede no MikroTik via SSH...
 ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p 2222 admin@127.0.0.1 "/snmp set enabled=yes; /ip dhcp-client add interface=ether2 disabled=no" >nul 2>nul
 
-echo [4/4] MikroTik CHR pronto e respondendo!
+echo [4/5] Verificando servidor SMTP local (MailHog para testes de e-mail)...
+docker inspect mailhog >nul 2>nul
+if %ERRORLEVEL% equ 0 (
+    docker start mailhog >nul 2>nul
+) else (
+    docker run -d --name mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog:latest >nul 2>nul
+)
+
+echo [5/5] Ambiente MikroTik + SMTP pronto e respondendo!
 echo.
 echo ==============================================================================
 echo   DADOS PARA CONECTAR NO DASHBOARD (Cfg ⚙️):
