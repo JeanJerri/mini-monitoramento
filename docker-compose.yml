@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  mikrotik_chr:
+    image: cnsoluciones/mikrotik:latest
+    container_name: mikrotik_chr
+    privileged: true
+    restart: unless-stopped
+    command:
+      - "-enable-kvm"
+      - "-device"
+      - "e1000,netdev=net_snmp"
+      - "-netdev"
+      - "user,id=net_snmp,hostfwd=udp::161-:161"
+    ports:
+      - "2222:22"     # SSH RouterOS
+      - "8291:8291"   # Winbox
+      - "8088:80"     # WebFig (HTTP)
+      - "161:161/udp" # SNMP Polling

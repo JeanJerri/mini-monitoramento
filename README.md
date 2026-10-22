@@ -146,21 +146,37 @@ O sistema implementa regras estritas para notificação:
 ### 6.1. Desenvolvimento Fora do Laboratório com MikroTik RouterOS CHR
 Para o desenvolvimento fora do laboratório, as equipes devem utilizar a versão do **MikroTik RouterOS CHR**:
 * **Tutorial Oficial de Instalação:** [MikroTik CHR Installation Guide](https://manual.mikrotik.com/docs/getting-started/installation-and-upgrade/install/chr-installation/)
-* **Passos no VirtualBox:**
-  1. Baixe a imagem VDI do RouterOS CHR em [mikrotik.com/download](https://mikrotik.com/download).
-  2. Crie uma VM (Linux 64-bit, 256 MB RAM) apontando para o arquivo VDI.
-  3. Em **Rede**, selecione **Placa em modo Bridge** ou **Placa exclusiva de hospedeiro (Host-Only)**.
-  4. Inicie a VM, faça login como `admin` (sem senha) e habilite o SNMP:
-     ```routeros
-     /snmp set enabled=yes
-     /snmp community add name=public read-access=yes
-     /ip address print
-     ```
-  5. No Dashboard (`Cfg` ⚙️), selecione modo **Coleta SNMP Real**, insira o IP do MikroTik, porta `161`, comunidade `public` e perfil `MikroTik RouterOS CHR`.
+
+#### Opção A: Execução via Docker (Sem VirtualBox - Mais Rápido)
+Se não tiver o VirtualBox instalado ou preferir usar Docker:
+1. Dê dois cliques em **`iniciar_mikrotik_docker.bat`** (ou execute `docker compose up -d`).
+2. O script iniciará o container do MikroTik CHR com aceleração KVM e encaminhamento da porta SNMP `161/udp`.
+3. No Dashboard (`Cfg` ⚙️):
+   * **Origem dos Dados:** Coleta SNMP Real
+   * **IP do Roteador:** `127.0.0.1`
+   * **Porta SNMP:** `161`
+   * **Comunidade:** `public`
+   * **Perfil de CPU:** `MikroTik RouterOS CHR`
+4. **Gerar Carga no MikroTik via SSH:**
+   ```bash
+   ssh -p 2222 admin@127.0.0.1 "/tool bandwidth-test address=127.0.0.1 direction=both duration=25s"
+   ```
+
+#### Opção B: Execução no VirtualBox
+1. Baixe a imagem VDI do RouterOS CHR em [mikrotik.com/download](https://mikrotik.com/download).
+2. Crie uma VM (Linux 64-bit, 256 MB RAM) apontando para o arquivo VDI.
+3. Em **Rede**, selecione **Placa em modo Bridge** ou **Placa exclusiva de hospedeiro (Host-Only)**.
+4. Inicie a VM, faça login como `admin` (sem senha) e habilite o SNMP:
+   ```routeros
+   /snmp set enabled=yes
+   /snmp community add name=public read-access=yes
+   /ip address print
+   ```
+5. No Dashboard (`Cfg` ⚙️), selecione modo **Coleta SNMP Real**, insira o IP do MikroTik, porta `161`, comunidade `public` e perfil `MikroTik RouterOS CHR`.
 * **Gerar Tráfego no MikroTik para Teste de Threshold:**
-  ```routeros
-  /tool bandwidth-test address=127.0.0.1 direction=both duration=25s
-  ```
+   ```routeros
+   /tool bandwidth-test address=127.0.0.1 direction=both duration=25s
+   ```
 
 ---
 
