@@ -22,7 +22,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "snmp_v3_user": "",
     "snmp_v3_auth_key": "",
     "snmp_v3_priv_key": "",
-    "if_index": 1,
+    "if_index": 2,
     "cpu_profile": "mikrotik",  # "mikrotik" (RouterOS CHR), "auto", "cisco", "linux", "custom"
     "cpu_custom_oid": "",
     

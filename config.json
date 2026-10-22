@@ -7,7 +7,7 @@
   "snmp_v3_user": "",
   "snmp_v3_auth_key": "",
   "snmp_v3_priv_key": "",
-  "if_index": 1,
+  "if_index": 2,
   "cpu_profile": "mikrotik",
   "cpu_custom_oid": "",
   "interval_s": 5,
@@ -16,13 +16,13 @@
   "traffic_threshold_target": "both",
   "cpu_threshold_percent": 80.0,
   "alert_popup": true,
-  "alert_email": false,
+  "alert_email": true,
   "alert_cooldown_s": 300,
   "smtp_host": "smtp.gmail.com",
   "smtp_port": 587,
   "smtp_use_tls": true,
   "smtp_user": "",
   "smtp_password": "",
-  "smtp_from": "",
-  "smtp_to": ""
+  "smtp_from": "jeanjerry2015@gmail.com",
+  "smtp_to": "jeanjerri2022@gmail.com"
 }

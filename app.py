@@ -155,7 +155,13 @@ def modal_configuracoes() -> None:
                     index=0 if cfg.get("snmp_version", "v2c") == "v2c" else 1,
                 )
                 m_community = st.text_input("Comunidade SNMP (v2c)", value=cfg.get("snmp_community", "public"), type="password")
-                m_iface = st.number_input("Índice da Interface (ifIndex)", value=int(cfg.get("if_index", 1)), min_value=1, max_value=256)
+                m_iface = st.number_input(
+                    "Índice da Interface (ifIndex)",
+                    value=int(cfg.get("if_index", 2)),
+                    min_value=1,
+                    max_value=256,
+                    help="No MikroTik RouterOS CHR: ifIndex 2 = ether1 (tráfego de rede), ifIndex 1 = lo (loopback). Use o botão Descobrir Interfaces.",
+                )
 
             m_cpu_profile = st.selectbox(
                 "Perfil de OID para CPU",
@@ -183,7 +189,7 @@ def modal_configuracoes() -> None:
                       /snmp community add name=public read-access=yes
                       ```
                     * **Descobrir o IP do MikroTik:** execute `/ip address print` no terminal do RouterOS.
-                    * **Interfaces:** selecione `ifIndex 1` (normalmente `ether1`) ou use o botão *Descobrir Interfaces*.
+                    * **Interfaces:** selecione `ifIndex 2` (`ether1` no RouterOS CHR; `ifIndex 1` é a interface de loopback `lo`) ou use o botão *Descobrir Interfaces*.
                     """
                 )
 
