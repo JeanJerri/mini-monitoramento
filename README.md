@@ -20,11 +20,11 @@
 
 O sistema atende integralmente tanto ao documento oficial (PDF de requisitos) quanto às orientações passadas em aula (quadro e áudio do professor):
 
-* **Coleta SNMP Real e Híbrida:** Suporta conexões diretas via protocolo SNMP (v2c e v3) a roteadores físicos (Cisco, MikroTik, Linux), máquinas virtuais com **MikroTik RouterOS CHR** (padrão obrigatório fora do laboratório) e inclui um **Simulador de Roteador Virtual Integrado** para testes locais.
+* **Coleta SNMP Real Nativa:** Suporta conexões diretas via protocolo SNMP (v2c e v3) a roteadores físicos (Cisco, MikroTik, Linux) e máquinas virtuais/containers com **MikroTik RouterOS CHR** (Docker ou VirtualBox).
 * **Layout Fiel ao Quadro da Sala:**
   * **Cabeçalho:** Intervalo de coleta em segundos (com validação estrita $> 0$) e acesso rápido a configurações (`Cfg`).
   * **Painel Tempo Real (RT):** Controles `▶ Iniciar`, `⏸ Pausar` e `↻ Resetar`, janela deslizante configurável (1 a 30 min) e dois gráficos lado a lado com linhas tracejadas de *threshold* (*Tráfego IN/OUT em bps* e *CPU em %*).
-  * **Painel Histórico (Hist.):** Filtro central por data e hora de início e fim (`DD/MM/AAAA HH:MM`) com atalhos rápidos e gráficos estáticos gerados a partir do banco de dados/CSV.
+  * **Painel Histórico (Hist.):** Filtro central por data e hora de início e fim (`DD/MM/AAAA HH:MM`) com atalhos rápidos e gráficos estáticos gerados a partir do banco de dados/CSV com coletas reais acumuladas.
 * **Resiliência e Tratamento de Erros:** Quedas de link, timeouts e erros de comunidade não travam nem fecham o dashboard; o status é reportado visualmente e a reconexão ocorre de forma transparente.
 * **Alertas com Histerese:** Notificações simultâneas por **Pop-up** e **E-mail (SMTP real)** com disparo exclusivo na transição de estado (*Normal $\rightarrow$ Excedido*), prevenindo tempestades de e-mails (*spam*).
 
@@ -147,22 +147,21 @@ O sistema implementa regras estritas para notificação:
 Para o desenvolvimento fora do laboratório, as equipes devem utilizar a versão do **MikroTik RouterOS CHR**:
 * **Tutorial Oficial de Instalação:** [MikroTik CHR Installation Guide](https://manual.mikrotik.com/docs/getting-started/installation-and-upgrade/install/chr-installation/)
 
-#### Opção A: Execução via Docker (Sem VirtualBox - Mais Rápido)
-Se não tiver o VirtualBox instalado ou preferir usar Docker:
+#### Opção A: Execução via Docker (Ambiente Automatizado)
 1. Dê dois cliques em **`iniciar_mikrotik_docker.bat`** (ou execute `docker compose up -d`).
-2. O script iniciará o container do MikroTik CHR com aceleração KVM e encaminhamento da porta SNMP `161/udp`.
+2. O script iniciará o container do MikroTik CHR com portas `161/udp` (SNMP) e `2222/tcp` (SSH), além do MailHog (`8025/tcp`).
 3. No Dashboard (`Cfg` ⚙️):
-   * **Origem dos Dados:** Coleta SNMP Real
-   * **IP do Roteador:** `127.0.0.1`
-   * **Porta SNMP:** `161`
-   * **Comunidade:** `public`
+   * **IP do Roteador:** `127.0.0.1` | **Porta:** `161`
+   * **Comunidade:** `public` | **Interface (ifIndex):** `2` (`ether1` no RouterOS)
    * **Perfil de CPU:** `MikroTik RouterOS CHR`
-4. **Gerar Carga no MikroTik via SSH:**
-   ```bash
-   ssh -p 2222 admin@127.0.0.1 "/tool bandwidth-test address=127.0.0.1 direction=both duration=25s"
-   ```
+4. **Gerar Carga Real no MikroTik:**
+   * Pelo Dashboard: clique no botão da barra lateral **"Gerar Pico no MikroTik (SSH)"**.
+   * Ou pelo PowerShell:
+     ```powershell
+     ssh -o StrictHostKeyChecking=no -p 2222 admin@127.0.0.1 ":for i from=1 to=25 do={ :for j from=1 to=3000 do={ :put \"BURST_TEST_STREAM_MIKROTIK_0123456789_ABCDEFGHIJ\" }; :delay 500ms }"
+     ```
 
-#### Opção B: Execução no VirtualBox
+#### Opção B: Execução no VirtualBox (Orientação da Disciplina)
 1. Baixe a imagem VDI do RouterOS CHR em [mikrotik.com/download](https://mikrotik.com/download).
 2. Crie uma VM (Linux 64-bit, 256 MB RAM) apontando para o arquivo VDI.
 3. Em **Rede**, selecione **Placa em modo Bridge** ou **Placa exclusiva de hospedeiro (Host-Only)**.
@@ -172,10 +171,10 @@ Se não tiver o VirtualBox instalado ou preferir usar Docker:
    /snmp community add name=public read-access=yes
    /ip address print
    ```
-5. No Dashboard (`Cfg` ⚙️), selecione modo **Coleta SNMP Real**, insira o IP do MikroTik, porta `161`, comunidade `public` e perfil `MikroTik RouterOS CHR`.
-* **Gerar Tráfego no MikroTik para Teste de Threshold:**
-   ```routeros
-   /tool bandwidth-test address=127.0.0.1 direction=both duration=25s
+5. No Dashboard (`Cfg` ⚙️), insira o IP retornado pelo comando anterior, porta `161`, comunidade `public` e perfil `MikroTik RouterOS CHR`.
+6. **Gerar Tráfego com o Comando PING (Exigência do Professor):**
+   ```powershell
+   ping -t -l 6000 <IP_DA_VM_VIRTUALBOX>
    ```
 
 ---
@@ -186,27 +185,27 @@ Para garantir **nota máxima (10,0)** durante a avaliação com o professor na s
 
 ### Passo 1: Comprovar a Carga Inicial de 1 a 2 horas (Item Obrigatório)
 1. Abra o dashboard pelo arquivo `iniciar_dashboard.bat`.
-2. No painel inferior de **Histórico** (ou na aba *Consulta Histórica*), selecione o atalho **Últimas 2 horas**.
-3. Aponte para os dois gráficos históricos e mostre as curvas contínuas carregadas do arquivo `data/medicoes.csv`.
-4. *Dica:* Se precisar regenerar a base limpa de 2 horas na hora, basta clicar no botão **"📥 Gerar 2h de Base Histórica"** na barra lateral.
+2. Como o sistema foi deixado em execução previamente por 2 horas, os dados reais capturados do roteador já estão persistidos em `data/medicoes.csv`.
+3. No painel inferior de **Histórico**, selecione o atalho **Últimas 2 horas** (ou filtre o intervalo desejado).
+4. Aponte para os dois gráficos históricos e mostre as curvas contínuas com os dados reais de entrada, saída e processamento.
+5. Mostre a tabela de dados brutos e exporte o CSV caso o professor solicite auditoria dos registros.
 
 ### Passo 2: Testar os Controles em Tempo Real (RT)
 1. No painel superior, clique em **▶ Iniciar**:
-   * Mostre o gráfico em janela deslizante atualizando suavemente a cada N segundos.
+   * Mostre o gráfico em janela deslizante atualizando suavemente a cada N segundos via SNMP real.
 2. Clique em **⏸ Pausar**:
    * Mostre que o gráfico congela e preserva todos os pontos lidos até o momento.
 3. Clique em **↻ Resetar Tela**:
    * Mostre que a tela é limpa para iniciar nova observação, **sem apagar** o histórico gravado em disco.
 
-### Passo 3: Demonstrar o Alerta por Pop-up
-1. Na aba **⚙️ Configurações (Cfg)**, garanta que o canal **[x] Pop-up** esteja ativado.
-2. Na barra lateral, clique no botão **🔥 Injetar Pico de Sobrecarga (30s)** (ou reduza o threshold para um valor baixo).
-3. Mostre o alerta `st.toast` e os cards de métricas mudando para cor de sobrecarga com os detalhes da ocorrência.
-
-### Passo 4: Demonstrar o Alerta por E-mail e Histerese
-1. Na aba **⚙️ Configurações (Cfg)**, ative **[x] E-mail (SMTP)** e insira os dados do servidor SMTP de teste (ou clique no botão **✉️ Testar Disparo de E-mail**).
-2. Provoque novo pico e mostre o e-mail chegando na caixa postal com a métrica, valor, threshold e data/hora.
-3. Explique ao professor a **histerese**: o sistema não envia e-mails repetidos enquanto o tráfego continuar alto, evitando tempestades de notificações.
+### Passo 3: Demonstrar o Alerta por Pop-up e E-mail com Sobrecarga Real
+1. Na aba **⚙️ Configurações (Cfg)**, ative **[x] Pop-up** e **[x] E-mail (SMTP)** simultaneamente.
+2. Defina um threshold de teste (ex.: Tráfego em **50.000 bps** ou CPU em **20%**).
+3. Provoque a sobrecarga real:
+   * No VirtualBox ou Roteador Físico: execute `ping -t -l 6000 <IP_DO_ROTEADOR>`.
+   * No Docker: execute o comando SSH ou clique no botão lateral **"Gerar Pico no MikroTik (SSH)"**.
+4. Mostre o alerta `st.toast` na tela e abra o MailHog (`http://localhost:8025`) para comprovar o e-mail entregue com timestamp, métrica, valor e limite violado.
+5. Explique a **histerese**: o sistema disparou a notificação apenas na transição de estado normal para excedido, sem inundar a caixa postal.
 
 ### Passo 5: Demonstrar Resiliência a Falhas de Conexão
 1. No modo SNMP Real, altere o IP do roteador para um IP inexistente (ex.: `192.0.2.1`) ou desconecte temporariamente o cabo de rede.

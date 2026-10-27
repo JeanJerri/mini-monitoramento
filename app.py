@@ -142,13 +142,7 @@ def modal_configuracoes() -> None:
         with t_snmp:
             col_m1, col_m2 = st.columns(2)
             with col_m1:
-                m_mode = st.selectbox(
-                    "Origem dos Dados",
-                    ["simulated", "snmp_real"],
-                    index=0 if cfg.get("collection_mode") == "simulated" else 1,
-                    format_func=lambda x: "Modo Simulação / Demonstração" if x == "simulated" else "Coleta SNMP Real (Roteador Físico ou MikroTik CHR)",
-                )
-                m_ip = st.text_input("IP ou Hostname do Roteador", value=cfg.get("ip_address", "127.0.0.1"))
+                m_ip = st.text_input("IP ou Hostname do Roteador", value=cfg.get("ip_address", "127.0.0.1"), help="IP do roteador físico, VM VirtualBox ou container Docker.")
                 m_port = st.number_input("Porta UDP", value=int(cfg.get("snmp_port", 161)), min_value=1, max_value=65535)
             with col_m2:
                 m_version = st.selectbox(
@@ -258,7 +252,7 @@ def modal_configuracoes() -> None:
 
     if btn_save:
         updated = dict(cfg)
-        updated["collection_mode"] = m_mode
+        updated["collection_mode"] = "snmp_real"
         updated["ip_address"] = m_ip.strip()
         updated["snmp_port"] = int(m_port)
         updated["snmp_version"] = m_version
@@ -436,31 +430,29 @@ with st.sidebar:
 
     st.divider()
 
-    st.markdown("**Testes de Bancada:**")
-    if st.button("Gerar Pico de Tráfego e CPU (25s)", use_container_width=True, type="secondary"):
-        st.session_state.stress_until = datetime.now().timestamp() + 25.0
-        if cfg.get("collection_mode") == "snmp_real":
-            def _inject_real_snmp_stress() -> None:
-                try:
-                    cmd = ':for i from=1 to=25 do={ :for j from=1 to=3000 do={ :put "BURST_TEST_STREAM_MIKROTIK_0123456789_ABCDEFGHIJ" }; :delay 500ms }'
-                    subprocess.run(
-                        ["ssh", "-o", "StrictHostKeyChecking=no", "-p", "2222", "admin@127.0.0.1", cmd],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=35,
-                    )
-                except Exception:
-                    pass
-
-            threading.Thread(target=_inject_real_snmp_stress, daemon=True).start()
-            st.toast("Disparando rajada real de tráfego e CPU no MikroTik via SSH...", icon="⚡")
+    st.markdown("**Diagnóstico e Testes:**")
+    if st.button("Testar Conexão SNMP", use_container_width=True):
+        res = st.session_state.collector.test_connection(cfg)
+        if res.get("success"):
+            st.toast(f"Conectado: {res.get('sys_descr', 'MikroTik RouterOS')}", icon="✅")
         else:
-            st.toast("Pico de tráfego ativado temporariamente no simulador.", icon="ℹ️")
+            st.toast(f"Falha: {res.get('error')}", icon="❌")
 
-    if st.button("Regenerar Carga de 2 Horas", use_container_width=True):
-        count = gerar_historico.populate_history(hours=2.0, overwrite=True)
-        st.toast(f"Base histórica regenerada ({count} amostras).", icon="✅")
-        st.rerun()
+    if st.button("Gerar Pico no MikroTik (SSH)", use_container_width=True, type="secondary"):
+        def _inject_real_snmp_stress() -> None:
+            try:
+                cmd = ':for i from=1 to=25 do={ :for j from=1 to=3000 do={ :put "BURST_TEST_STREAM_MIKROTIK_0123456789_ABCDEFGHIJ" }; :delay 500ms }'
+                subprocess.run(
+                    ["ssh", "-o", "StrictHostKeyChecking=no", "-p", "2222", "admin@127.0.0.1", cmd],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=35,
+                )
+            except Exception:
+                pass
+
+        threading.Thread(target=_inject_real_snmp_stress, daemon=True).start()
+        st.toast("Disparando rajada real de tráfego e CPU no MikroTik via SSH...", icon="⚡")
 
 
 # ==============================================================================
@@ -542,48 +534,17 @@ with rt_ctrl5:
 def secao_tempo_real() -> None:
     # 1. Coleta e cálculo da nova amostra
     if st.session_state.is_running:
-        now_dt = datetime.now().replace(microsecond=0)
-        sample: Dict[str, Any] = {}
-
-        if cfg.get("collection_mode") == "snmp_real":
-            sample = st.session_state.collector.collect_sample(cfg)
-            if not sample.get("success"):
-                st.session_state.last_snmp_error = sample.get("error")
-            else:
-                st.session_state.last_snmp_error = None
+        sample = st.session_state.collector.collect_sample(cfg)
+        if not sample.get("success"):
+            st.session_state.last_snmp_error = sample.get("error")
         else:
-            now_ts = now_dt.timestamp()
-            is_stress = now_ts < st.session_state.stress_until
-            st.session_state.sim_counter += 1
-            c = st.session_state.sim_counter
-
-            base_in = 8_000_000 + 4_000_000 * abs(math.sin(c / 8.0)) + random.uniform(0, 2_000_000)
-            base_out = 3_000_000 + 2_500_000 * abs(math.cos(c / 10.0)) + random.uniform(0, 1_000_000)
-            base_cpu = 25.0 + 35.0 * abs(math.sin(c / 12.0)) + random.uniform(0, 8.0)
-
-            if is_stress:
-                base_in += 18_000_000
-                base_out += 14_000_000
-                base_cpu = 90.0 + random.uniform(0, 7.0)
-
-            sample = {
-                "success": True,
-                "error": None,
-                "timestamp": now_dt,
-                "inbound_bps": round(base_in, 2),
-                "outbound_bps": round(base_out, 2),
-                "cpu_percent": round(min(99.0, base_cpu), 1),
-                "source": "SIMULADO",
-            }
             st.session_state.last_snmp_error = None
-
-        if sample.get("success", False):
             st.session_state.live_points.append(sample)
             st.session_state.live_points = st.session_state.live_points[-2000:]
             gerar_historico.append_measurement(
                 sample,
-                ip=cfg.get("ip_address", "192.168.1.1"),
-                iface=f"ifIndex_{cfg.get('if_index', 1)}",
+                ip=cfg.get("ip_address", "127.0.0.1"),
+                iface=f"ifIndex_{cfg.get('if_index', 2)}",
             )
 
             # Avaliação de Alertas com Histerese (apenas transição Normal -> Excedido)
@@ -594,6 +555,7 @@ def secao_tempo_real() -> None:
                         f"Alerta: {a['metric_name']} atingiu {a['observed_str']} (Limiar: {a['threshold_str']})",
                         icon="⚠️",
                     )
+
 
     # Exibição de falha de conexão (Resiliência)
     if st.session_state.last_snmp_error:
