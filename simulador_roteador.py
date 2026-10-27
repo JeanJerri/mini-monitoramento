@@ -12,7 +12,7 @@ import socket
 import sys
 import threading
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 def encode_asn1_length(length: int) -> bytes:
@@ -58,23 +58,60 @@ def tuple_to_oid_str(subids: Tuple[int, ...]) -> str:
     return ".".join(str(s) for s in subids)
 
 
+import ctypes
+
+class MIBICMPSTATS(ctypes.Structure):
+    _fields_ = [
+        ('dwMsgs', ctypes.c_ulong), ('dwErrors', ctypes.c_ulong),
+        ('dwDestUnreachs', ctypes.c_ulong), ('dwTimeExcds', ctypes.c_ulong),
+        ('dwParmProbs', ctypes.c_ulong), ('dwSrcQuenchs', ctypes.c_ulong),
+        ('dwRedirects', ctypes.c_ulong), ('dwEchoes', ctypes.c_ulong),
+        ('dwEchoReps', ctypes.c_ulong), ('dwTimestamps', ctypes.c_ulong),
+        ('dwTimestampReps', ctypes.c_ulong), ('dwAddrMasks', ctypes.c_ulong),
+        ('dwAddrMaskReps', ctypes.c_ulong)
+    ]
+
+class MIBICMPINFO(ctypes.Structure):
+    _fields_ = [('icmpInStats', MIBICMPSTATS), ('icmpOutStats', MIBICMPSTATS)]
+
+class MIB_ICMP(ctypes.Structure):
+    _fields_ = [('stats', MIBICMPINFO)]
+
+
 class RouterState:
-    """Estado dinâmico com simulação contínua de tráfego e CPU."""
+    """
+    Estado do Agente SNMP que responde diretamente ao tráfego de rede REAL.
+    Em repouso, os contadores e a CPU permanecem em nível ocioso (0 a pouquíssimos bps).
+    Quando um comando ping (ex: ping -t -l 6000 127.0.0.1) é disparado no terminal,
+    ele detecta os pacotes ICMP reais recebidos e reflete a taxa exata e CPU nos contadores MIB-II.
+    """
 
     def __init__(self) -> None:
         self.start_time = time.time()
         self.last_update = time.time()
-        self.in_octets_1 = 125_000_000
-        self.out_octets_1 = 48_000_000
-        self.in_octets_2 = 32_000_000
-        self.out_octets_2 = 14_000_000
-        self.stress_mode = False
-        self.stress_until = 0.0
+        self.in_octets_1 = 1_000_000
+        self.out_octets_1 = 1_000_000
+        self.in_octets_2 = 500_000
+        self.out_octets_2 = 500_000
+        self.current_cpu = 3
+        self.last_ping_time = 0.0
+        self.prev_icmp_echoes = self._read_icmp_echoes()
 
-    def trigger_stress(self, duration_s: float = 30.0) -> None:
-        """Força um pico de sobrecarga por N segundos para demonstrar os alertas."""
-        self.stress_until = time.time() + duration_s
-        print(f"\n[!] MODO DE ESTRESSE ATIVADO POR {duration_s} SEGUNDOS! Tráfego e CPU em alta.")
+    def _read_icmp_echoes(self) -> Optional[int]:
+        """Lê o total acumulado de solicitações de Echo ICMP recebidas pelo SO via WinAPI."""
+        try:
+            info = MIB_ICMP()
+            res = ctypes.windll.iphlpapi.GetIcmpStatistics(ctypes.byref(info))
+            if res == 0:
+                return int(info.stats.icmpInStats.dwEchoes)
+        except Exception:
+            pass
+        return None
+
+    def trigger_stress(self, duration_s: float = 25.0) -> None:
+        """Injeta carga programática caso solicitado."""
+        self.last_ping_time = time.time() + duration_s
+        print(f"\n[!] Carga ativada por {duration_s} segundos.")
 
     def update(self) -> None:
         now = time.time()
@@ -83,32 +120,38 @@ class RouterState:
             return
         self.last_update = now
 
-        t = now - self.start_time
-        # Tráfego base: 8 Mbps a 14 Mbps (IN) e 3 Mbps a 7 Mbps (OUT)
-        rate_in = 8_000_000 + 4_500_000 * abs(math.sin(t / 14.0)) + random.uniform(0, 1_500_000)
-        rate_out = 3_500_000 + 2_500_000 * abs(math.cos(t / 18.0)) + random.uniform(0, 1_000_000)
+        curr_echoes = self._read_icmp_echoes()
+        diff_echoes = 0
+        if curr_echoes is not None and self.prev_icmp_echoes is not None:
+            if curr_echoes >= self.prev_icmp_echoes:
+                diff_echoes = curr_echoes - self.prev_icmp_echoes
+            self.prev_icmp_echoes = curr_echoes
 
-        # Se pico estiver ativo (salta para ~25-30 Mbps)
-        if self.stress_mode or now < self.stress_until:
-            rate_in += 18_000_000
-            rate_out += 14_000_000
-
-        delta_in = int((rate_in / 8.0) * dt)
-        delta_out = int((rate_out / 8.0) * dt)
-
-        # Incremento acumulado com rollover de 32 bits
-        self.in_octets_1 = (self.in_octets_1 + delta_in) % 4_294_967_296
-        self.out_octets_1 = (self.out_octets_1 + delta_out) % 4_294_967_296
-        self.in_octets_2 = (self.in_octets_2 + int(delta_in * 0.4)) % 4_294_967_296
-        self.out_octets_2 = (self.out_octets_2 + int(delta_out * 0.4)) % 4_294_967_296
+        if diff_echoes > 0:
+            self.last_ping_time = now
+            # Ping real detectado! Pacote típico do professor com -l 6000:
+            # 6000 bytes de carga + cabeçalhos = ~6040 bytes por pacote
+            bytes_transferred = diff_echoes * 6040
+            self.in_octets_1 = (self.in_octets_1 + bytes_transferred) % 4_294_967_296
+            self.out_octets_1 = (self.out_octets_1 + bytes_transferred) % 4_294_967_296
+            self.in_octets_2 = (self.in_octets_2 + bytes_transferred) % 4_294_967_296
+            self.out_octets_2 = (self.out_octets_2 + bytes_transferred) % 4_294_967_296
+            # CPU sobe para processar a fragmentação dos pacotes de 6000 bytes
+            self.current_cpu = min(85, 25 + diff_echoes * 8 + random.randint(0, 5))
+            print(f"[ICMP PING DETECTADO] {diff_echoes} pacote(s) recebidos -> +{bytes_transferred} bytes")
+        elif now < self.last_ping_time:
+            # Carga forçada via botão de bancada
+            fake_bytes = int(120_000 * dt)
+            self.in_octets_1 = (self.in_octets_1 + fake_bytes) % 4_294_967_296
+            self.out_octets_1 = (self.out_octets_1 + fake_bytes) % 4_294_967_296
+            self.current_cpu = random.randint(35, 55)
+        else:
+            # Roteador em repouso (idle)
+            if now - self.last_ping_time > 1.5:
+                self.current_cpu = random.randint(2, 4)
 
     def get_cpu_load(self) -> int:
-        now = time.time()
-        t = now - self.start_time
-        base_cpu = 28.0 + 32.0 * abs(math.sin(t / 20.0)) + random.uniform(0, 7.0)
-        if self.stress_mode or now < self.stress_until:
-            base_cpu = 88.0 + random.uniform(0, 9.0)  # Salta para 88% a 97%
-        return int(min(99.0, max(5.0, base_cpu)))
+        return int(self.current_cpu)
 
 
 state = RouterState()

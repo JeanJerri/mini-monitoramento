@@ -14,7 +14,7 @@ CONFIG_PATH = BASE_DIR / "config.json"
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     # Conexão SNMP
-    "collection_mode": "simulated",  # "snmp_real" ou "simulated"
+    "collection_mode": "snmp_real",  # "snmp_real" (padrão oficial) ou "simulated"
     "ip_address": "127.0.0.1",
     "snmp_port": 161,
     "snmp_version": "v2c",  # "v2c" ou "v3"
