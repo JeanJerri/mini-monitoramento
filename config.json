@@ -1,5 +1,5 @@
 {
-  "collection_mode": "simulated",
+  "collection_mode": "snmp_real",
   "ip_address": "127.0.0.1",
   "snmp_port": 161,
   "snmp_version": "v2c",
@@ -21,8 +21,8 @@
   "smtp_host": "smtp.gmail.com",
   "smtp_port": 587,
   "smtp_use_tls": true,
-  "smtp_user": "",
-  "smtp_password": "",
+  "smtp_user": "jeanjerry2015@gmail.com",
+  "smtp_password": "uggi ijpt xrhp lbmk",
   "smtp_from": "jeanjerry2015@gmail.com",
   "smtp_to": "jeanjerri2022@gmail.com"
 }
