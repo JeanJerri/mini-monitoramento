@@ -38,10 +38,10 @@ mini-monitoramento/
 ├── snmp_engine.py           # Módulo de coleta SNMP, cálculos em bps, delta t e rollover
 ├── alert_engine.py          # Gerenciador de alertas, histerese/debounce e envio SMTP
 ├── config_manager.py        # Gerenciamento e persistência das configurações (config.json)
-├── gerar_historico.py       # Carga inicial (1 a 2 horas) e persistência em CSV
-├── simulador_roteador.py    # Agente SNMP virtual (UDP 161 e 1161) para testes e bancada
+├── historico_csv.py         # Persistência contínua em CSV e carregador histórico (sem simulação)
 ├── iniciar_dashboard.bat    # Script de inicialização automática do dashboard no Windows
-├── iniciar_simulador.bat    # Script para iniciar o roteador virtual SNMP
+├── iniciar_mikrotik_docker.bat # Script para subir MikroTik CHR e MailHog no Docker
+├── docker-compose.yml       # Definição dos containers de MikroTik CHR e SMTP
 ├── config.json              # Arquivo de configurações persistentes da aplicação
 ├── requirements.txt         # Bibliotecas Python (Streamlit, Pandas, Plotly, PySNMP)
 └── data/
@@ -135,47 +135,60 @@ O sistema implementa regras estritas para notificação:
 * Sistema Operacional: Windows 10 ou 11.
 * Python **3.13** instalado (já configurado no ambiente local).
 
-### Como Iniciar
-1. **Para abrir o Dashboard:**
-   * Dê dois cliques em `iniciar_dashboard.bat`.
-   * O script verificará o ambiente virtual `.venv`, atualizará as dependências e abrirá o navegador em `http://localhost:8501`.
-2. **Para rodar o Simulador de Roteador SNMP (Opcional para testes sem roteador físico/VM):**
-   * Dê dois cliques em `iniciar_simulador.bat`.
-   * Ele iniciará um agente SNMP em segundo plano ouvindo nas portas UDP 161 e 1161, respondendo com as OIDs de MikroTik/Cisco MIB-II.
+### Como Iniciar o Dashboard
+1. Dê dois cliques em **`iniciar_dashboard.bat`**.
+2. O script inicializará o ambiente virtual `.venv`, validará as dependências e abrirá automaticamente o navegador em `http://localhost:8501`.
 
-### 6.1. Desenvolvimento Fora do Laboratório com MikroTik RouterOS CHR
-Para o desenvolvimento fora do laboratório, as equipes devem utilizar a versão do **MikroTik RouterOS CHR**:
-* **Tutorial Oficial de Instalação:** [MikroTik CHR Installation Guide](https://manual.mikrotik.com/docs/getting-started/installation-and-upgrade/install/chr-installation/)
+---
 
-#### Opção A: Execução via Docker (Ambiente Automatizado)
-1. Dê dois cliques em **`iniciar_mikrotik_docker.bat`** (ou execute `docker compose up -d`).
-2. O script iniciará o container do MikroTik CHR com portas `161/udp` (SNMP) e `2222/tcp` (SSH), além do MailHog (`8025/tcp`).
-3. No Dashboard (`Cfg` ⚙️):
-   * **IP do Roteador:** `127.0.0.1` | **Porta:** `161`
-   * **Comunidade:** `public` | **Interface (ifIndex):** `2` (`ether1` no RouterOS)
-   * **Perfil de CPU:** `MikroTik RouterOS CHR`
-4. **Gerar Carga Real no MikroTik:**
-   * Pelo Dashboard: clique no botão da barra lateral **"Gerar Pico no MikroTik (SSH)"**.
-   * Ou pelo PowerShell:
-     ```powershell
-     ssh -o StrictHostKeyChecking=no -p 2222 admin@127.0.0.1 ":for i from=1 to=25 do={ :for j from=1 to=3000 do={ :put \"BURST_TEST_STREAM_MIKROTIK_0123456789_ABCDEFGHIJ\" }; :delay 500ms }"
-     ```
+### 6.1. Configuração e Execução nos 3 Ambientes Suportados
 
-#### Opção B: Execução no VirtualBox (Orientação da Disciplina)
-1. Baixe a imagem VDI do RouterOS CHR em [mikrotik.com/download](https://mikrotik.com/download).
-2. Crie uma VM (Linux 64-bit, 256 MB RAM) apontando para o arquivo VDI.
-3. Em **Rede**, selecione **Placa em modo Bridge** ou **Placa exclusiva de hospedeiro (Host-Only)**.
-4. Inicie a VM, faça login como `admin` (sem senha) e habilite o SNMP:
+O sistema opera **100% via SNMP real**, sendo compatível com qualquer uma das três opções abaixo:
+
+#### Opção 1: Roteador Físico de Laboratório (Cisco ou MikroTik)
+1. Conecte o cabo de rede Ethernet do computador a uma porta LAN do roteador.
+2. Descubra o IP do roteador (ex.: `192.168.88.1` no MikroTik ou `192.168.1.1`/`10.0.0.1` no Cisco).
+3. No Dashboard (**Cfg ⚙️**):
+   * **IP do Roteador:** Insira o IP do roteador físico.
+   * **Porta:** `161` | **Comunidade:** Comunidade do laboratório (ex.: `public`).
+   * **Interface (ifIndex):** Clique em *"Descobrir Interfaces"* e selecione a porta conectada.
+4. **Gerar Tráfego Real com o Comando PING no CMD:**
+   ```cmd
+   ping -t -l 6000 192.168.88.1
+   ```
+   *(Os pacotes ICMP de 6 KB atravessam o cabo físico, elevando os contadores de hardware e a CPU. Ao parar com `Ctrl + C`, o gráfico cai para zero).*
+
+#### Opção 2: MikroTik RouterOS CHR no VirtualBox (Orientação Oficial da Disciplina)
+1. Baixe o disco VDI oficial em [mikrotik.com/download](https://mikrotik.com/download).
+2. Crie uma VM (Linux 64-bit, 256 MB RAM) anexando o arquivo VDI.
+3. Em **Configurações da VM** $\rightarrow$ **Rede**, defina o Adaptador 1 como:
+   * **Placa em modo Bridge (Bridged Adapter)** com sua placa Wi-Fi/Ethernet OU
+   * **Placa exclusiva de hospedeiro (Host-Only)**.
+4. Inicie a VM, faça login como `admin` (sem senha) e consulte o IP:
    ```routeros
    /snmp set enabled=yes
    /snmp community add name=public read-access=yes
    /ip address print
    ```
-5. No Dashboard (`Cfg` ⚙️), insira o IP retornado pelo comando anterior, porta `161`, comunidade `public` e perfil `MikroTik RouterOS CHR`.
-6. **Gerar Tráfego com o Comando PING (Exigência do Professor):**
-   ```powershell
+5. No Dashboard (**Cfg ⚙️**), insira o IP retornado (ex.: `192.168.56.10` ou `192.168.1.X`), porta `161`, comunidade `public` e perfil `MikroTik RouterOS CHR`.
+6. **Gerar Tráfego Real com o Comando PING no CMD:**
+   ```cmd
    ping -t -l 6000 <IP_DA_VM_VIRTUALBOX>
    ```
+
+#### Opção 3: MikroTik RouterOS CHR via Docker (Ambiente Automatizado Local)
+1. Dê dois cliques em **`iniciar_mikrotik_docker.bat`** (ou execute `docker compose up -d`).
+2. O script iniciará o container do MikroTik CHR mapeando `161/udp` (SNMP) e `2222/tcp` (SSH), além do MailHog (`8025/tcp`).
+3. No Dashboard (**Cfg ⚙️**):
+   * **IP do Roteador:** `127.0.0.1` | **Porta:** `161`
+   * **Comunidade:** `public` | **Interface (ifIndex):** `2` (`ether1` no RouterOS)
+   * **Perfil de CPU:** `MikroTik RouterOS CHR`
+4. **Gerar Carga Real no MikroTik:**
+   * **Pelo CMD / PowerShell (SSH):**
+     ```cmd
+     ssh -o StrictHostKeyChecking=no -p 2222 admin@127.0.0.1 ":for i from=1 to=25 do={ :for j from=1 to=3000 do={ :put \"BURST_TEST_STREAM_MIKROTIK_0123456789_ABCDEFGHIJ\" }; :delay 500ms }"
+     ```
+   * **Ou pelo Dashboard:** Clique no botão da barra lateral **"Gerar Pico no MikroTik (SSH)"**.
 
 ---
 
@@ -183,14 +196,14 @@ Para o desenvolvimento fora do laboratório, as equipes devem utilizar a versão
 
 Para garantir **nota máxima (10,0)** durante a avaliação com o professor na sua bancada, execute exatamente este roteiro:
 
-### Passo 1: Comprovar a Carga Inicial de 1 a 2 horas (Item Obrigatório)
+### Passo 1: Comprovar a Carga Inicial de 1 a 2 horas (Histórico e Persistência - 15%)
 1. Abra o dashboard pelo arquivo `iniciar_dashboard.bat`.
 2. Como o sistema foi deixado em execução previamente por 2 horas, os dados reais capturados do roteador já estão persistidos em `data/medicoes.csv`.
 3. No painel inferior de **Histórico**, selecione o atalho **Últimas 2 horas** (ou filtre o intervalo desejado).
 4. Aponte para os dois gráficos históricos e mostre as curvas contínuas com os dados reais de entrada, saída e processamento.
 5. Mostre a tabela de dados brutos e exporte o CSV caso o professor solicite auditoria dos registros.
 
-### Passo 2: Testar os Controles em Tempo Real (RT)
+### Passo 2: Testar os Controles em Tempo Real (Gráficos RT e Controles - 20%)
 1. No painel superior, clique em **▶ Iniciar**:
    * Mostre o gráfico em janela deslizante atualizando suavemente a cada N segundos via SNMP real.
 2. Clique em **⏸ Pausar**:
@@ -198,15 +211,24 @@ Para garantir **nota máxima (10,0)** durante a avaliação com o professor na s
 3. Clique em **↻ Resetar Tela**:
    * Mostre que a tela é limpa para iniciar nova observação, **sem apagar** o histórico gravado em disco.
 
-### Passo 3: Demonstrar o Alerta por Pop-up e E-mail com Sobrecarga Real
+### Passo 3: Explicar a Coleta SNMP e os Cálculos (Coleta e Cálculos - 25%)
+1. Clique em **Cfg ⚙️** e comprove a leitura das OIDs padronizadas MIB-II (`ifInOctets`, `ifOutOctets`) e CPU (`hrProcessorLoad` / `mtxrProcessorLoad`).
+2. Explique a fórmula da taxa: $\text{bps} = \frac{\Delta\text{Bytes} \times 8}{\Delta t}$ com $\Delta t$ de ponto flutuante.
+3. Destaque o tratamento de counter rollover para contadores de 32 bits ($2^{32}-1$) e suporte a 64 bits (`Counter64`).
+
+### Passo 4: Demonstrar o Sistema de Alertas e Histerese (Sistema de Alertas - 20%)
 1. Na aba **⚙️ Configurações (Cfg)**, ative **[x] Pop-up** e **[x] E-mail (SMTP)** simultaneamente.
 2. Defina um threshold de teste (ex.: Tráfego em **50.000 bps** ou CPU em **20%**).
-3. Provoque a sobrecarga real:
+3. Provoque a sobrecarga real no terminal (CMD/PowerShell):
    * No VirtualBox ou Roteador Físico: execute `ping -t -l 6000 <IP_DO_ROTEADOR>`.
    * No Docker: execute o comando SSH ou clique no botão lateral **"Gerar Pico no MikroTik (SSH)"**.
 4. Mostre o alerta `st.toast` na tela e abra o MailHog (`http://localhost:8025`) para comprovar o e-mail entregue com timestamp, métrica, valor e limite violado.
-5. Explique a **histerese**: o sistema disparou a notificação apenas na transição de estado normal para excedido, sem inundar a caixa postal.
+5. Explique a **histerese (debounce)**: o sistema disparou a notificação apenas na transição de estado normal para excedido, sem inundar a caixa postal com spam.
 
-### Passo 5: Demonstrar Resiliência a Falhas de Conexão
-1. No modo SNMP Real, altere o IP do roteador para um IP inexistente (ex.: `192.0.2.1`) ou desconecte temporariamente o cabo de rede.
-2. Mostre que o dashboard **não quebra, não trava e não fecha**: ele exibe o badge vermelho de falha de conexão e retoma a leitura automaticamente assim que o link é restabelecido.
+### Passo 5: Demonstrar Resiliência a Falhas de Conexão (Configuração e Erros - 10%)
+1. No modo SNMP Real, altere a porta do roteador para `162` (porta fechada) ou desconecte temporariamente o cabo de rede.
+2. Mostre que o dashboard **não quebra, não trava e não fecha**: ele exibe o badge vermelho de falha de conexão e retoma a leitura automaticamente assim que a porta volta para `161`.
+
+### Passo 6: Apresentação do Repositório e Código (Documentação e Código - 10%)
+1. Apresente a arquitetura modular limpa no VS Code (`app.py`, `snmp_engine.py`, `alert_engine.py`, `config_manager.py`).
+2. Mostre o histórico de commits atômicos padronizados no Git (`git log --oneline -n 6`).

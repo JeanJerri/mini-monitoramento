@@ -24,7 +24,7 @@ import streamlit as st
 
 import alert_engine
 import config_manager
-import gerar_historico
+import historico_csv
 import snmp_engine
 
 # Configuração da Página
@@ -104,7 +104,7 @@ def init_session() -> None:
 
     if "live_points" not in st.session_state:
         st.session_state.live_points = []
-        recent_df = gerar_historico.load_measurements()
+        recent_df = historico_csv.load_measurements()
         if not recent_df.empty:
             st.session_state.live_points = recent_df.tail(60).to_dict("records")
 
@@ -541,7 +541,7 @@ def secao_tempo_real() -> None:
             st.session_state.last_snmp_error = None
             st.session_state.live_points.append(sample)
             st.session_state.live_points = st.session_state.live_points[-2000:]
-            gerar_historico.append_measurement(
+            historico_csv.append_measurement(
                 sample,
                 ip=cfg.get("ip_address", "127.0.0.1"),
                 iface=f"ifIndex_{cfg.get('if_index', 2)}",
@@ -652,7 +652,7 @@ st.markdown('<div class="panel-header">Painel Histórico (Hist.)</div>', unsafe_
 if dt_end <= dt_start:
     st.error("A data/hora final deve ser estritamente posterior à data/hora inicial.")
 else:
-    df_all = gerar_historico.load_measurements()
+    df_all = historico_csv.load_measurements()
     hist_filtered = df_all[
         (df_all["timestamp"] >= dt_start) & (df_all["timestamp"] <= dt_end)
     ].copy()
