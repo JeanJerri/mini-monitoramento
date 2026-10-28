@@ -443,7 +443,15 @@ with st.sidebar:
             try:
                 cmd = ':for i from=1 to=25 do={ :for j from=1 to=3000 do={ :put "BURST_TEST_STREAM_MIKROTIK_0123456789_ABCDEFGHIJ" }; :delay 500ms }'
                 subprocess.run(
-                    ["ssh", "-o", "StrictHostKeyChecking=no", "-p", "2222", "admin@127.0.0.1", cmd],
+                    [
+                        "ssh",
+                        "-o", "StrictHostKeyChecking=no",
+                        "-o", "UserKnownHostsFile=/dev/null",
+                        "-o", "LogLevel=ERROR",
+                        "-p", "2222",
+                        "admin@127.0.0.1",
+                        cmd,
+                    ],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     timeout=35,
